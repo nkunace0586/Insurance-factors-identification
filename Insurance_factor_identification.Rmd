@@ -1,0 +1,271 @@
+---
+title: "Analysis: Insurance factors identification"
+author: "Cyril Nkuna"
+date: "2024-08-17"
+output: pdf_document
+---
+
+
+```{r}
+# Loading libraries
+library(tidyverse)
+library(lubridate)
+library(readxl)
+library(readr)
+library(dplyr)
+library(data.table)
+library(scales)
+library(ggplot2)
+library(dplyr)
+
+```
+
+
+
+```{r}
+# Loading data
+df.raw <- read.csv("../Insurance factors identification/Insurance_factor_identification.csv")
+
+```
+
+
+
+```{r}
+# Data inspection
+names(df.raw)
+head(df.raw)
+str(df.raw)
+
+# Check missing values
+anyNA(df.raw)
+
+# Check duplicates
+anyDuplicated(df.raw)
+
+```
+
+
+# 1. Descriptive Analysis of Data Fields
+
+```{r}
+
+# Factor categorical columns
+df.1 <- df.raw %>%
+  mutate(Kilometres=as.factor(Kilometres), Zone= as.factor(Zone), Bonus=as.factor(Bonus), Make= as.factor(Make))
+
+# Summary statistics
+summary(df.1)
+
+```
+
+
+```{r}
+# Frequency tables for categorical variables
+
+# Frequency table for Kilometres
+cat("Table 1: Frequency Distribution of Kilometres\n")
+print(table(df.1$Kilometres))
+
+# Frequency table for Zone
+cat("\nTable 2: Frequency Distribution of Zone\n")
+print(table(df.1$Zone))
+
+# Frequency table for Bonus
+cat("\nTable 3: Frequency Distribution of Bonus\n")
+print(table(df.1$Bonus))
+
+# Frequency table for Make
+cat("\nTable 4: Frequency Distribution of Make\n")
+print(table(df.1$Make))
+
+```
+
+
+# 2.	Relationship Between Payment, Number of Claims, and Insured Policy Years
+
+```{r}
+
+# Scatterplots, density/histograms plots, and correlation coefficients for Payment vs Claims vs Insured Policy Years
+
+library(GGally)
+scatter_corr_plot <- ggpairs(df.1, columns = c("Payment", "Claims", "Insured"))
+scatter_corr_plot
+
+```
+
+The plot is showing a strong positive linear relationship between all pairs of variables (Payment, Claims, and Insured), as it is supported by the high correlation coefficients. These relationships indicate that higher values in one variable are associated with higher values in the others, and conversely, lower values in one variable are associated with lower values in the others (e.g., higher insurance coverage leading to higher claims and payments, and lower insurance coverage leading to lower claims and payments).
+
+
+
+# 3.	Factors Affecting Payment Variations
+
+```{r}
+# Linear model to check the influence of variables on Payment
+lm.payment <- lm(Payment ~ Kilometres + Zone + Bonus + Make + Insured + Claims, data = df.1)
+summary(lm.payment)
+
+```
+
+
+- The R-squared = 0.9954 indicates that about 99.54% of the variation in Payment is explained by the model. 
+- The model's p-value < 2.2e-16 is very small, indicate that the model is statistically significant.
+-The model appears to fit the data very well, given the high R-squared and highly significant F-statistic.
+- Most Kilometres categories, Zone4, Zone6, most Make categories, Insured, and Claims are significant predictors of Payment, because their P-values are less than 0.05 significance level. However, some variables like Zone2, Zone3, and most Bonus categories are not statistically significant, indicating they might not have a substantial impact on Payment.
+
+
+```{r}
+# Perform ANOVA on the regression model
+anova_result <- anova(lm.payment)
+anova_result
+
+```
+
+All the factors in the model are statistically significant with p-value < 2.2e-16, suggesting they all play an important role in explaining the variation in the total payment. The factors Make, Insured, and Claims have large F values, indicating they are the most influential.
+
+
+
+# 4.	Location, Kilometre, and Bonus Level Impact on Insured Amount, Claims, and Payment
+
+```{r}
+# Aggregate the dataset based on location, kilometre, and bonus level.
+df.aggregated <- df.1 %>%
+  group_by(Zone, Kilometres, Bonus) %>%
+  summarise(Total_Insured = sum(Insured),
+            Total_Claims = sum(Claims),
+            Total_Payment = sum(Payment)) %>%
+  arrange(desc(Total_Payment))
+
+# Aggregated data
+head(df.aggregated)
+
+```
+
+
+
+
+```{r}
+# Bar charts for aggregated total Payment by Zone and Kilometers.
+
+# Summarize the data by Zone to get the total payment per region
+df.1 <- df.1 %>% 
+  group_by(Zone) %>%
+  mutate(`Total_Payment (Per 10)` = round(sum(Payment)/10,2))
+
+# plot
+ggplot(df.1, aes(x = Zone)) +
+  geom_bar(aes(y = Payment, fill = Kilometres), stat = "identity", position = "dodge") +
+  geom_line(aes(y = `Total_Payment (Per 10)`, color= `Total Payment Per Zone`, group = 1), 
+            color = "blue", linewidth = 1, linetype = "dashed") +
+  geom_point(aes(x = Zone, y = `Total_Payment (Per 10)`), 
+             color = "blue", size = 2.5) +
+  labs(title = "Total Payment by Zone and Kilometers",
+       x = "Zone",
+       y = "Total Payment by Zone and Kilometers",
+       fill = "Kilometers",
+       caption="The blue dotted line represents the total payment in units of 10 Skr for each zone.") +
+  theme_minimal() +
+  scale_y_continuous(
+    labels = label_number(scale_cut = cut_short_scale()) ,
+    sec.axis = sec_axis(~ ., name = "Zone Total Payment (Per 10 Skr)",
+                        labels = label_number(scale_cut = cut_short_scale()))
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 12, face = "bold"),
+    axis.title.y.right = element_text(color = "blue"),
+    axis.text.y.right = element_text(color = "blue"),
+    axis.line.y.right = element_line(color = "blue")
+  )
+
+```
+
+- Zone 4 has the highest total payment, particularly for lower kilometer categories 1, 2, 3.
+
+- The bar chart shows that the payment trend are higher in the lower kilometer categories compared to the higher kilometer categories in all the zone.
+
+- Kilometer category 2 has the highest payment made by the insurance company compared to the other Kilometer categories, especially in zone 1 to zone 6.
+
+- It is clear from the plot that lower kilometers correlate with higher total payments, especially in zone 1 to zone 6.
+
+Conclusion:
+- Lower kilometres correlate with higher total payments in all the zones.
+- Zone 4 appears to be a high-risk area, with the highest total payments. Zones 1, 2, and 3 also show significant payments, suggesting moderate to high risk in these areas as well. Zone 7 appears to be a low-risk area, with the lowest total payments made by the insurance company, implying fewer or less severe claims.
+
+
+```{r}
+# Bar charts for total Claims by Bonus Level and Kilometres
+
+# Summarize the data by Bonus to get the total payment per region
+df.1 <- df.1 %>% 
+  group_by(Bonus) %>%
+  mutate(`Total_Claims (Per 10)` = round(sum(Claims)/10,2))
+  
+# plot
+ggplot(df.1, aes(x = Bonus)) +
+  geom_bar(aes(y = Claims, fill = Kilometres), stat = "identity", position = "dodge") +
+  geom_line(aes(y = `Total_Claims (Per 10)`, color= `Total Claims Per Bonus Level`, group = 1), 
+            color = "blue", linewidth = 1, linetype = "dashed") +
+  geom_point(aes(y = `Total_Claims (Per 10)`), 
+             color = "blue", size = 2.5) +
+  labs(title = "Claims by Bonus Level and Kilometers",
+       x = "Bonus Level",
+       y = "Claims by Bonus Level and Kilometers",
+       fill = "Kilometers",
+       caption="The blue dotted line represents the total number claims in units of 10 for each bonus level.") +
+  theme_minimal() +
+  scale_y_continuous(
+    labels = label_number(scale_cut = cut_short_scale()) ,
+    sec.axis = sec_axis(~ ., name = "Bonus Level Total Claims (Per 10)",
+                        labels = label_number(scale_cut = cut_short_scale()))
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 12, face = "bold"),
+    axis.title.y.right = element_text(color = "blue"),
+    axis.text.y.right = element_text(color = "blue"),
+    axis.line.y.right = element_line(color = "blue")
+  )
+
+
+```
+
+- Bonus level 7 (which corresponds to a long time without claims) has a significantly higher number of claims (scaled in units of 10) compared to the other bonus levels, as shown by the blue dotted line. Bonus level 1 also shows a relatively high number of claims, but lower than Bonus level 7.
+- Claims are lower in Bonus Levels 2 to 6, suggesting that drivers with fewer or no claims in recent years tend to claim less frequently.
+- The relationship between kilometers and claims shows that the highest claims are associated with lower kilometers categories, particularly Kilometres 1, 2, and 3.
+
+
+Conclusion
+- Claims seem to decrease with higher kilometer categories across all bonus levels.
+- Bonus levels 1, 2, and 3 generally show higher numbers of claims in kilometer categories 1, 2, and 3 compared to the higher kilometer categories (4 and 5).
+- Bonus Level 7 (which corresponds to a long time without claims) has a significantly higher number of total claims compared to the other bonus levels. Bonus level 1 also shows a relatively high number of claims, with the highest total number of claims overall.
+
+
+
+# 5.	Factors Affecting Claim Rates
+
+
+```{r}
+# Linear model to check the influence of variables on Claim Rate
+l.mod_claims <- lm(Claims ~ Kilometres + Zone + Bonus + Make + Insured, data = df.1)
+summary(l.mod_claims)
+
+```
+
+- Kilometres2 is statistically significant, with a positive coefficient, suggesting that this level is associated with an increase in the number of claims compared to the reference category (Kilometres1). WhereasKilometres4 and Kilometres5 are statistically significant with negative coefficients, indicating a decrease in the number of claims compared to the reference category.
+
+- All Zone variables are statistically significant with negative coefficients, suggesting that being in another zone is associated with fewer claims compared to the reference zone (Zone1).
+
+- All Bonus variables are statistically significant with negative coefficients, indicating that higher bonus categories are associated with fewer claims.
+
+- Several Make variables are significant with negative coefficients, indicating that certain car makes are associated with fewer claims. However, Make9 has a very large positive coefficient, indicating a significant increase in the number of claims for Make9.
+
+- The Insured variable is highly significant with a positive coefficient, indicating that the number of policies (Insured) is associated with the number of claims.
+
+
+- Multiple R-squared = 0.8746, meaning approximately 87.46% of the variability in Claims is explained by the model, suggesting that the model is capturing most of the important factors affecting Claims.
+
+- F-statistic = 601.7 on 25 and 2156 DF, with a p-value < 2.2e-16, indicates that the model is statistically significant overall, meaning that at least one of the predictors is significantly related to Claims.
+
+Conclusion: 
+- The model shows that Kilometres, Zone, Bonus, Make, and Insured have statistically significant impacts on the number of claims.
+- The negative coefficients for many Zone, Bonus, and Make categories suggest that these factors are associated with fewer claims. Whereas the positive coefficient for Kilometres2, Make9, and Insured, suggests that these factors are associated with an increase in the number of claims.
+
+
